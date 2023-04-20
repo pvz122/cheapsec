@@ -1,0 +1,5 @@
+*.out
+.gdb_history
+.DS_Store
+pwn
+.vscode
