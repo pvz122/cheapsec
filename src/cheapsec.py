@@ -3,6 +3,7 @@
 import sys
 import os
 import subprocess
+import pty
 
 # ----------- global vars -----------
 
@@ -110,6 +111,9 @@ def run_check_tests(glibc_path: str) -> bool:
     check_files = os.listdir(os.path.join(file_wd, "../testing/checks"))
     check_files = [check for check in check_files if check.endswith(".c")]
 
+    # get glibc version
+    glibc_version = version_of_glibc(glibc_path)
+
     print("Compiling and running tests for security checks...")
     for check in check_files:
         check_file = os.path.join(file_wd, "../testing/checks", check)
@@ -127,13 +131,31 @@ def run_check_tests(glibc_path: str) -> bool:
             stats["check"][check] = "E"
             continue
 
-        # run and get result
-        try:
-            ret_content = subprocess.check_output(
-                ["timeout", "1s", "./cheapsec_test"], stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            ret_content = e.output
-        ret_content = ret_content.decode("utf-8")
+        if glibc_version == "" or (int)(glibc_version.split(".")[1]) <= 26:
+            # run in a pseudo terminal
+            # because glibc <= 2.26 use '__libc_message' which directly output to /dev/tty
+            pid, fd = pty.fork()
+            if pid == 0:
+                # child
+                os.execvp("timeout", ["timeout", "1s", "./cheapsec_test"])
+            else:
+                # parent
+                ret_content = b""
+                while True:
+                    try:
+                        ret_content += os.read(fd, 1024)
+                    except:
+                        break
+
+            ret_content = ret_content.decode("utf-8")
+        else:
+            # directly run
+            try:
+                ret_content = subprocess.check_output(
+                    ["timeout", "1s", "./cheapsec_test"], stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError as e:
+                ret_content = e.output
+            ret_content = ret_content.decode("utf-8")
 
         if check in ret_content:
             stats["check"][check] = "Y"
