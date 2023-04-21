@@ -3,3 +3,5 @@
 .DS_Store
 pwn
 .vscode
+testing/exps/rmtmpfile.sh
+testing/exps/rmex.py

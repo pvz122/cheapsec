@@ -101,8 +101,65 @@ def lookup_check(glibc_version: str) -> bool:
 
 # run exploitability tests
 def run_exp_tests(glibc_path: str) -> bool:
-    # TODO: run exploitability tests
-    return False
+    # list file in testing/exps
+    exp_dirs = os.listdir(os.path.join(file_wd, "../testing/exps"))
+    exp_dirs = [exp for exp in exp_dirs if os.path.isdir(
+        os.path.join(file_wd, "../testing/exps", exp))]
+    exp_dirs.sort()
+
+    # get glibc version
+    glibc_version = version_of_glibc(glibc_path)
+
+    print("Compiling and running tests for exploitabilities...")
+    for exp in exp_dirs:
+        for exp_file in os.listdir(os.path.join(file_wd, "../testing/exps", exp)):
+            stats["exp"][exp] = "U"
+            if not exp_file.endswith(".c"):
+                continue
+
+            exp_file = os.path.join(file_wd, "../testing/exps", exp, exp_file)
+
+            # compile
+            if not compile_with_glibc(exp_file, glibc_path):
+                print("Error: failed to compile {}".format(exp_file))
+                stats["exp"][exp] = "E"
+                continue
+
+            if glibc_version == "" or (int)(glibc_version.split(".")[1]) <= 26:
+                # run in a pseudo-terminal
+                # because glibc <= 2.26 use '__libc_message' which directly output to /dev/tty
+                try:
+                    pid, fd = pty.fork()
+                    if pid == 0:
+                        os.execvp(
+                            "timeout", ["timeout", "1s", "./cheapsec_test"])
+                    else:
+                        ret_code = os.waitpid(pid, 0)[1]
+
+                    if ret_code == 0:
+                        stats["exp"][exp] = "Y"
+                        break
+                    else:
+                        stats["exp"][exp] = "N"
+                except:
+                    stats["exp"][exp] = "E"
+
+            else:
+                # run in a subprocess
+                ret_code = subprocess.run(["timeout", "1s", "./cheapsec_test"],
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+                if ret_code == 0:
+                    stats["exp"][exp] = "Y"
+                    break
+                else:
+                    stats["exp"][exp] = "N"
+
+        try:
+            os.remove("cheapsec_test")
+        except:
+            pass
+
+    return True
 
 
 # run security check tests
@@ -110,6 +167,7 @@ def run_check_tests(glibc_path: str) -> bool:
     # list file in testing/checks
     check_files = os.listdir(os.path.join(file_wd, "../testing/checks"))
     check_files = [check for check in check_files if check.endswith(".c")]
+    check_files.sort()
 
     # get glibc version
     glibc_version = version_of_glibc(glibc_path)
@@ -134,7 +192,12 @@ def run_check_tests(glibc_path: str) -> bool:
         if glibc_version == "" or (int)(glibc_version.split(".")[1]) <= 26:
             # run in a pseudo terminal
             # because glibc <= 2.26 use '__libc_message' which directly output to /dev/tty
-            pid, fd = pty.fork()
+            try:
+                pid, fd = pty.fork()
+            except:
+                stats["check"][check] = "E"
+                continue
+
             if pid == 0:
                 # child
                 os.execvp("timeout", ["timeout", "1s", "./cheapsec_test"])
@@ -167,6 +230,8 @@ def run_check_tests(glibc_path: str) -> bool:
             os.remove("cheapsec_test")
         except:
             pass
+
+    return True
 
 
 # statistic of exploitabilities and security checks, print them
@@ -235,7 +300,7 @@ def main():
             exit(1)
 
         lookup_flag = False
-        if sys.argv[1] == "-t":
+        if sys.argv[1] == "-t" or sys.argv[1] == "-tes" or sys.argv[1] == "-tse":
             exp_flag, check_flag = True, True
         elif sys.argv[1] == "-te":
             exp_flag, check_flag = True, False
