@@ -5,3 +5,4 @@ pwn
 .vscode
 testing/exps/rmtmpfile.sh
 testing/exps/rmex.py
+src/gendatabase.py

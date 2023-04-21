@@ -4,6 +4,7 @@ import sys
 import os
 import subprocess
 import pty
+import json
 
 # ----------- global vars -----------
 
@@ -15,7 +16,7 @@ Usage:  cheapsec        <executable path | glibc path>
         cheapsec -h
 
 Options:
-    [no option]:    Lookup exploitabilities and security checks for glibc library from database
+    [no option]:    Lookup exploitabilities and security checks for glibc library
     -l:             Lookup exploitabilities and security checks for the specified glibc version
     -t:             Run tests for exploitabilities and security checks
     -te:            Run tests for exploitabilities
@@ -87,16 +88,17 @@ def version_of_glibc(glibc_path: str) -> str:
     return ret_content
 
 
-# get exploitabilities from database
-def lookup_exp(glibc_version: str) -> bool:
-    # TODO: get exploitabilities from database
-    return False
+# get exploitabilities and checks from database
+def lookup_exp_check(glibc_version: str) -> bool:
+    try:
+        with open(os.path.join(file_wd, "../data/stats.json"), "r") as f:
+            all_stats = json.load(f)
+            stats["check"] = all_stats[glibc_version]["check"]
+            stats["exp"] = all_stats[glibc_version]["exp"]
+    except:
+        return False
 
-
-# get security checks from database
-def lookup_check(glibc_version: str) -> bool:
-    # TODO: get security checks from database
-    return False
+    return True
 
 
 # run exploitability tests
@@ -296,7 +298,7 @@ def main():
         # run tests
         if len(sys.argv) < 3:
             print(
-                "Error: missing executable path or glibc path, run 'cheapsec --help' for more information")
+                "Error: missing executable path or glibc path, run 'cheapsec -h' for more information")
             exit(1)
 
         lookup_flag = False
@@ -307,7 +309,7 @@ def main():
         elif sys.argv[1] == "-ts":
             exp_flag, check_flag = False, True
         else:
-            print("Error: invalid option, run 'cheapsec --help' for more information")
+            print("Error: invalid option, run 'cheapsec -h' for more information")
             exit(1)
 
         arg_path = sys.argv[2]
@@ -315,16 +317,22 @@ def main():
         # lookup specific version
         if len(sys.argv) < 3:
             print(
-                "Error: missing glibc version, run 'cheapsec --help' for more information")
+                "Error: missing glibc version, run 'cheapsec -h' for more information")
             exit(1)
 
         lookup_version = sys.argv[2]
+    elif sys.argv[1].startswith("-"):
+        # invalid option
+        print("Error: invalid option, run 'cheapsec -h' for more information")
+        exit(1)
     else:
         arg_path = sys.argv[1]
 
     # get glibc path
     if arg_path != "":
         glibc_path = get_glibc_path(arg_path)
+        if glibc_path == "":
+            exit(1)
 
     if lookup_flag:
         # lookup exploitabilities and security checks
@@ -332,13 +340,12 @@ def main():
         # get glibc version
         if lookup_version == "":
             lookup_version = version_of_glibc(glibc_path)
+            if lookup_version == "":
+                exit(1)
+            else:
+                print("Target glibc version seems to be {}".format(lookup_version))
 
-        if lookup_version == "":
-            exit(1)
-        else:
-            print("Target glibc version seems to be {}".format(lookup_version))
-
-        if not lookup_exp(lookup_version) or not lookup_check(lookup_version):
+        if not lookup_exp_check(lookup_version):
             exit(1)
 
     if exp_flag:
