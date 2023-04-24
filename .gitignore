@@ -5,4 +5,6 @@ pwn
 .vscode
 testing/exps/rmtmpfile.sh
 testing/exps/rmex.py
-src/gendatabase.py
+src/gen*
+*.csv
+cheapsec_test
